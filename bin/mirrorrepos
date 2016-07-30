@@ -26,7 +26,7 @@ API_VERSION=v3
 
 DEFAULT_PER_PAGE=100
 
-override_repos=( mac-dev-setup mbox universe )
+override_repos=( docker-freeipa mac-dev-setup mbox universe )
 
 mirror_repo(){
 	local orig=$1
@@ -67,7 +67,7 @@ main(){
 	local repos=$(echo $response | jq --raw-output '.[] | {fullname:.full_name,repo:.name,fork:.fork,id:.id} | @base64')
 
 	for r in $repos; do
-		raw="$(echo $r | base64 --decode)"
+		raw="$(echo $r | base64 -d)"
 		local id=$(echo $raw | jq --raw-output '.id')
 		local fullname=$(echo $raw | jq --raw-output '.fullname')
 		local repo=$(echo $raw | jq --raw-output '.repo')

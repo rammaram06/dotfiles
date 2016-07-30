@@ -208,7 +208,7 @@ install_docker() {
 
 # install/update golang from source
 install_golang() {
-	export GO_VERSION=1.6.2
+	export GO_VERSION=1.6.3
 	export GO_SRC=/usr/local/go
 
 	# if we are passing the version
@@ -233,8 +233,12 @@ install_golang() {
 	set +e
 	go get github.com/golang/lint/golint
 	go get golang.org/x/tools/cmd/cover
+	go get golang.org/x/review/git-codereview
 	go get golang.org/x/tools/cmd/goimports
+	go get golang.org/x/tools/cmd/gorename
+	go get golang.org/x/tools/cmd/guru
 
+	go get github.com/jfrazelle/apk-file
 	go get github.com/jfrazelle/bane
 	go get github.com/jfrazelle/battery
 	go get github.com/jfrazelle/cliaoke
@@ -248,6 +252,7 @@ install_golang() {
 	go get github.com/jfrazelle/udict
 	go get github.com/jfrazelle/weather
 
+	go get github.com/axw/gocov/gocov
 	go get github.com/brianredbeard/gpget
 	go get github.com/cloudflare/cfssl/cmd/cfssl
 	go get github.com/cloudflare/cfssl/cmd/cfssljson
@@ -255,9 +260,15 @@ install_golang() {
 	go get github.com/crosbymichael/ip-addr
 	go get github.com/cbednarski/hostess/cmd/hostess
 	go get github.com/FiloSottile/gvt
+	go get github.com/FiloSottile/vendorcheck
+	go get github.com/nsf/gocode
+	go get github.com/rogpeppe/godef
+	go get github.com/shurcooL/git-branches
+	go get github.com/shurcooL/gostatus
+	go get github.com/shurcooL/markdownfmt
 	go get github.com/Soulou/curl-unix-socket
 
-	aliases=( cloudflare/cfssl docker/docker letsencrypt/boulder opencontainers/runc )
+	aliases=( cloudflare/cfssl docker/docker letsencrypt/boulder opencontainers/runc jfrazelle/binctr jfrazelle/contained.af )
 	for project in "${aliases[@]}"; do
 		owner=$(dirname "$project")
 		repo=$(basename "$project")
@@ -271,25 +282,38 @@ install_golang() {
 			(
 			# clone the repo
 			cd "${GOPATH}/src/github.com/${owner}"
-			git clone "git@github.com:${project}.git"
+			git clone "https://github.com/${project}.git"
+			# fix the remote path, since our gitconfig will make it git@
+			cd "${GOPATH}/src/github.com/${project}"
+			git remote set-url origin "https://github.com/${project}.git"
 			)
 		else
 			echo "found ${project} already in gopath"
 		fi
 
 		# make sure we create the right git remotes
-		(
-		cd "${GOPATH}/src/github.com/${project}"
-		git remote set-url --push origin no_push
-		git remote add jfrazelle "git@github.com:jfrazelle/${repo}.git"
-		)
+		if [[ "$owner" != "jfrazelle" ]]; then
+			(
+			cd "${GOPATH}/src/github.com/${project}"
+			git remote set-url --push origin no_push
+			git remote add jfrazelle "https://github.com/jfrazelle/${repo}.git"
+			)
+		fi
 
 		# create the alias
 		ln -snvf "${GOPATH}/src/github.com/${project}" "${HOME}/${repo}"
 	done
 
-	# clone any additional projects
-	git clone git@github.com:jfrazelle/binctr.git ${GOPATH}/src/github.com/jfrazelle/binctr
+	# do special things for k8s GOPATH
+	mkdir -p "${GOPATH}/src/k8s.io"
+	git clone "https://github.com/kubernetes/kubernetes.git" "${GOPATH}/src/k8s.io/kubernetes"
+	(
+	cd "${GOPATH}/src/k8s.io/kubernetes"
+	git remote set-url --push origin no_push
+	git remote add jfrazelle "https://github.com/jfrazelle/kubernetes.git"
+	)
+	ln -snvf "${GOPATH}/src/k8s.io/kubernetes" "${HOME}/kubernetes"
+
 
 	# create symlinks from personal projects to
 	# the ${HOME} directory
@@ -456,6 +480,61 @@ get_dotfiles() {
 	)
 }
 
+install_virtualbox() {
+	# check if we need to install libvpx1
+	PKG_OK=$(dpkg-query -W --showformat='${Status}\n' libvpx1 | grep "install ok installed")
+	echo Checking for libvpx1: $PKG_OK
+	if [ "" == "$PKG_OK" ]; then
+		echo "No libvpx1. Installing libvpx1."
+		jessie_sources=/etc/apt/sources.list.d/jessie.list
+		echo "deb http://httpredir.debian.org/debian jessie main contrib non-free" > $jessie_sources
+
+		apt-get update
+		apt-get install -y -t jessie libvpx1 \
+			--no-install-recommends
+
+		# cleanup the file that we used to install things from jessie
+		rm $jessie_sources
+	fi
+
+	echo "deb http://download.virtualbox.org/virtualbox/debian vivid contrib" >> /etc/apt/sources.list.d/virtualbox.list
+	curl -sSL https://www.virtualbox.org/download/oracle_vbox.asc | apt-key add -
+
+	apt-get update
+	apt-get install -y \
+		virtualbox-5.0
+	--no-install-recommends
+}
+
+install_vagrant() {
+	VAGRANT_VERSION=1.8.1
+
+	# if we are passing the version
+	if [[ ! -z "$1" ]]; then
+		export VAGRANT_VERSION=$1
+	fi
+
+	# check if we need to install virtualbox
+	PKG_OK=$(dpkg-query -W --showformat='${Status}\n' virtualbox | grep "install ok installed")
+	echo Checking for virtualbox: $PKG_OK
+	if [ "" == "$PKG_OK" ]; then
+		echo "No virtualbox. Installing virtualbox."
+		install_virtualbox
+	fi
+
+	tmpdir=`mktemp -d`
+	(
+	cd $tmpdir
+	curl -sSL -o vagrant.deb https://releases.hashicorp.com/vagrant/${VAGRANT_VERSION}/vagrant_${VAGRANT_VERSION}_x86_64.deb
+	dpkg -i vagrant.deb
+	)
+
+	rm -rf $tmpdir
+
+	# install plugins
+	vagrant plugin install vagrant-vbguest
+}
+
 
 usage() {
 	echo -e "install.sh\n\tThis script installs my basic setup for a debian laptop\n"
@@ -468,6 +547,7 @@ usage() {
 	echo "  golang                      - install golang and packages"
 	echo "  scripts                     - install scripts"
 	echo "  syncthing                   - install syncthing"
+	echo "  vagrant                     - install vagrant and virtualbox"
 }
 
 main() {
@@ -503,6 +583,8 @@ main() {
 		install_scripts
 	elif [[ $cmd == "syncthing" ]]; then
 		install_syncthing
+	elif [[ $cmd == "vagrant" ]]; then
+		install_vagrant "$2"
 	else
 		usage
 	fi

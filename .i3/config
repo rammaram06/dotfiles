@@ -37,6 +37,7 @@ for_window [class="Code"] floating enable
 for_window [class="Firefox"] floating enable
 for_window [class="Gimp"] floating enable
 for_window [class="google-chrome"] floating enable
+for_window [class="Keybase"] floating enable
 for_window [class="Neoman"] floating enable
 for_window [class="NES"] floating enable
 for_window [class="Portal"] floating enable
@@ -48,6 +49,7 @@ for_window [class="Virt-viewer"] floating enable
 for_window [class="VirtualBox"] floating enable
 for_window [class="vlc"] floating enable
 for_window [class="Wine"] floating enable
+for_window [class="Wireshark"] floating enable
 
 # lock screen
 bindsym $mod+l exec i3lock -c 111111
